@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # ======================================
+  # Backend API Service
+  # ======================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: testops-backend-api
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      PORT: 8080
+      MONGO_URL: mongodb://admin:admin123@mongo:27017
+    
+    # Port mapping: host:container
+    ports:
+      - "8080:8080"
+    
+    # Network configuration
+    networks:
+      - testops-network
+    
+    # Depends on MongoDB from database-microservice
+    external_links:
+      - testops-mongo:mongo
+
+# ======================================
+# Networks
+# ======================================
+networks:
+  testops-network:
+    external: true
+    name: testops-db-network

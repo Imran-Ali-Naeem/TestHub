@@ -1,0 +1,12 @@
+# Gateway Dockerfile
+FROM nginx:alpine
+
+RUN rm /etc/nginx/nginx.conf
+
+COPY nginx.conf /etc/nginx/nginx.conf
+
+RUN mkdir -p /app/results /app/videos /app/screenshots
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

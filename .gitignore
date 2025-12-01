@@ -1,0 +1,58 @@
+# Dependencies
+Frontend/node_modules/
+backend/vendor/
+
+# Build outputs
+Frontend/dist/
+Frontend/build/
+backend/main
+
+# Environment files (IMPORTANT: Keep .env committed for easy setup)
+# We're intentionally NOT ignoring .env files for simplicity
+# But remember: Don't use real production passwords!
+
+# Docker
+docker-compose.override.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+
+# IDE
+.vscode/settings.json
+.idea/
+*.iml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database volumes data
+database-microservice/mongo_data/
+
+# Test coverage
+coverage/
+*.coverprofile
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+.Trash-*

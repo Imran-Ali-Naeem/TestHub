@@ -1,0 +1,243 @@
+
+## **1️⃣ User Logs into THEX Web App**
+
+**Steps:**
+
+1. User opens the URL of the web app (e.g., `http://cloud-ip/thex`).
+    
+2. Enters **Email / Username** and **Password**.
+    
+3. Clicks **Login**.
+    
+
+**Backend Actions:**
+
+- Validates credentials.
+    
+- Checks **RBAC role**:
+    
+    |Role|Permissions|
+    |---|---|
+    |Admin|Full access, manage users, scripts, reports|
+    |User|Execute test scripts, view own results|
+
+    
+
+---
+
+## **2️⃣ User Creates a Test Suite**
+
+**Steps:**
+
+1. Cs **Create New Test Suite**.
+    
+2. Provides **suite name**.lick
+    
+3. Provides **website link** (base URL to test).
+    
+4. Provides **number of test scripts** to upload from computer.
+    
+5. Clicks **Save**.
+    
+
+    
+    
+
+---
+
+## **3️⃣ User Selects Browsers**
+
+**Steps:**
+
+- Chooses one or more browsers:
+    
+    - Chrome
+        
+    - Firefox
+        
+    - Both (for parallel execution)
+        
+
+
+---
+
+## **5️⃣ User Uploads Test Script(s)**
+
+**Steps:**
+
+- User uploads one or more scripts from computer.
+    
+- Supported languages (Python, JS, etc.)
+    
+- Scripts include Selenium actions, checks, or custom logic.
+    
+
+
+---
+
+## **6️⃣ User Clicks Run**
+
+**Steps:**
+
+- Frontend collects:
+    
+    - Test suite ID
+        
+    - Uploaded scripts
+        
+    - Browsers
+        
+    - Website URLs
+        
+- Sends the **test plan** to backend API.
+    
+
+---
+
+## **8️⃣ Test Execution (Dockerized Selenium Grid)**
+
+**Steps:**
+
+1. For each **browser selected**:
+    
+    - Starts **Selenium node session**.
+        
+2. For each **website/page**:
+    
+    - Executes all uploaded scripts.
+        
+    - Performs checks:
+        
+        - Wait for element
+            
+        - Assert text
+            
+        - Click buttons
+            
+        - Execute custom script logic
+            
+3. **Artifacts recorded**:
+    
+    - Screenshots (on failure or all steps if configured)
+        
+    - Videos of execution
+        
+    - Logs (pass/fail, console outputs)
+        
+
+**Backend Notes:**
+
+- Parallel execution: Browser × Site × Script run concurrently.
+    
+- Reduces total execution time.
+    
+
+---
+
+## **9️⃣ Real-Time Monitoring**
+
+**Frontend Actions:**
+
+- Displays **live status**:
+    
+    - Queued → Running → Finished
+        
+- Shows which scripts are running on which browser/page.
+    
+- Displays errors if any.
+    
+## **🔟 Test Completion**
+
+**Backend Actions:**
+
+- Marks run as finished.
+    
+- Stores all **artifacts** (screenshots, videos, logs) in **shared Docker volumes**.
+    
+- Generates **summary report**:
+    
+    - Pass/fail per script
+        
+    - Browser-wise results
+        
+    - Execution time
+        
+
+---
+
+## **1️⃣1️⃣ Report Generation**
+
+**Backend Actions:**
+
+- Uses **Allure Reporting** or similar tool.
+    
+- Aggregates:
+    
+    - Logs
+        
+    - Screenshots
+        
+    - Videos
+        
+    - Pass/fail metrics
+        
+- Creates **HTML report** accessible from frontend.
+    
+
+---
+
+## **1️⃣2️⃣ User Access to Results**
+
+**Frontend Actions:**
+
+- User can view **Run Detail page**:
+    
+    - Pass/fail per script
+        
+    - Browser used
+        
+    - Execution time
+        
+- User can access **Artifacts page**:
+    
+    - Screenshots
+        
+    - Videos
+        
+    - HTML report
+        
+- User options:
+    
+    - Re-run failed scripts
+        
+    - Clone suite
+        
+    - Schedule future runs
+        
+
+---
+
+## **1️⃣3️⃣ RBAC (Role-Based Access Control)**
+
+**Admin Actions:**
+
+- Create **new users**
+    
+- Assign roles:
+    
+    - Admin → Full access
+        
+    - User → Execute scripts
+        
+        
+
+
+**Notes:**
+
+- RBAC ensures security in **multi-user cloud deployments**.
+    
+- Each cloud instance maintains its **own admin and users**.
+    
+
+---
+-----------------------------------------------------------------------------"

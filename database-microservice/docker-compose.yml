@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # ======================================
+  # MongoDB Database Service
+  # ======================================
+  mongo:
+    image: mongo:7
+    container_name: testops-mongo
+    restart: unless-stopped
+    
+    # Environment variables for MongoDB initialization
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
+    
+    # Port mapping: host:container
+    ports:
+      - "${MONGO_PORT}:27017"
+    
+    # Volume mappings
+    volumes:
+      # Persist MongoDB data
+      - mongo_data:/data/db
+      # Initialization script
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    
+    # Network configuration
+    networks:
+      - db-network
+    
+    # Health check to verify MongoDB is ready
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/testops --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ======================================
+  # Mongo Express Web Interface
+  # ======================================
+  mongo-express:
+    image: mongo-express:latest
+    container_name: testops-mongo-express
+    restart: unless-stopped
+    
+    # Environment variables for Mongo Express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${ME_CONFIG_MONGODB_ADMINUSERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${ME_CONFIG_MONGODB_ADMINPASSWORD}
+      ME_CONFIG_MONGODB_URL: ${ME_CONFIG_MONGODB_URL}
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_CONFIG_BASICAUTH_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_CONFIG_BASICAUTH_PASSWORD}
+    
+    # Port mapping: host:container
+    ports:
+      - "${MONGO_EXPRESS_PORT}:8081"
+    
+    # Network configuration
+    networks:
+      - db-network
+    
+    # Wait for MongoDB to be healthy before starting
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+# ======================================
+# Networks
+# ======================================
+networks:
+  db-network:
+    driver: bridge
+    name: testops-db-network
+
+# ======================================
+# Volumes
+# ======================================
+volumes:
+  mongo_data:
+    name: testops-mongo-data

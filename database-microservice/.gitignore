@@ -1,0 +1,10 @@
+# MongoDB Data Directory
+# This directory stores persistent data
+mongo_data/
+
+# Docker Compose override files
+docker-compose.override.yml
+
+# Temporary files
+*.tmp
+*.log

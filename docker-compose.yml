@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: testops-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-testops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testops123}
+      POSTGRES_DB: ${POSTGRES_DB:-testops}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - testops-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-testops}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB (Alternative to PostgreSQL)
+  # mongo:
+  #   image: mongo:7
+  #   container_name: testops-mongo
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-testops}
+  #     MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-testops123}
+  #     MONGO_INITDB_DATABASE: ${MONGO_DB:-testops}
+  #   volumes:
+  #     - mongo_data:/data/db
+  #     - ./database/mongo/init.js:/docker-entrypoint-initdb.d/init.js
+  #   ports:
+  #     - "27017:27017"
+  #   networks:
+  #     - testops-network
+
+  # Redis Queue
+  redis:
+    image: redis:7-alpine
+    container_name: testops-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - testops-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: testops-backend
+    environment:
+      PORT: ${PORT:-8080}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_SECRET: ${JWT_SECRET}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - testops-network
+    restart: unless-stopped
+
+  # Python Selenium Runner
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    container_name: testops-runner
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      BACKEND_URL: http://backend:8080
+      DISPLAY: ${DISPLAY:-:99}
+    volumes:
+      - ./runner/output:/app/output
+      - ./runner/logs:/app/logs
+      - ./runner/testscripts:/app/testscripts
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - testops-network
+    restart: unless-stopped
+    # For running Xvfb (virtual display)
+    privileged: true
+
+  # Frontend (React/Vite)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: testops-frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost/api}
+    ports:
+      - "5173:5173"
+    networks:
+      - testops-network
+    restart: unless-stopped
+
+  # Nginx Gateway
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: testops-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./runner/output/videos:/app/videos
+      - ./runner/output/screenshots:/app/screenshots
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - testops-network
+    restart: unless-stopped
+
+networks:
+  testops-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  # mongo_data:
