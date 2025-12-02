@@ -67,13 +67,13 @@ export default function AuthPage() {
       const data = await response.json();
 
       if (data.success && data.data.token) {
-        // Store JWT token and user info
+        // Store JWT token and user info (with rememberMe preference)
         authLogin(data.data.token, {
           id: data.data.user.id,
           email: data.data.user.email,
           username: data.data.user.username,
           role: data.data.user.role,
-        });
+        }, rememberMe);
 
         // Also update legacy context (for compatibility)
         login(data.data.user.username, data.data.user.email, data.data.user.role === "admin" ? "Admin" : "Tester");
@@ -180,55 +180,16 @@ export default function AuthPage() {
     setIsForgotPassword(false);
   };
 
-  // Handle Google OAuth SIGNUP (NEW user)
-  const handleGoogleSignup = async (credentialResponse: CredentialResponse) => {
+  // Unified Google OAuth handler - works for both new and existing users
+  const handleGoogleAuth = async (credentialResponse: CredentialResponse) => {
     try {
       setIsSignupLoading(true);
-      setSignupError("");
-
-      // Send the Google credential to backend SIGNUP endpoint
-      const response = await fetch("http://localhost:8080/api/auth/google/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          credential: credentialResponse.credential,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.data.token && data.data.needsPassword) {
-        // Store Google user data and token, then show SET password screen
-        setGoogleUserData({
-          name: data.data.user.username,
-          email: data.data.user.email,
-          role: data.data.user.role,
-          token: data.data.token,
-          id: data.data.user.id,
-        });
-        setShowGooglePasswordSetup(true);
-        setIsLogin(false); // Stay in signup mode
-      } else {
-        setSignupError(data.message || "Google signup failed");
-      }
-    } catch (error) {
-      console.error("Google signup error:", error);
-      setSignupError("Failed to connect to server");
-    } finally {
-      setIsSignupLoading(false);
-    }
-  };
-
-  // Handle Google OAuth LOGIN (EXISTING user)
-  const handleGoogleLogin = async (credentialResponse: CredentialResponse) => {
-    try {
       setIsLoginLoading(true);
+      setSignupError("");
       setLoginError("");
 
-      // Send the Google credential to backend LOGIN endpoint
-      const response = await fetch("http://localhost:8080/api/auth/google/login", {
+      // Send credential to unified backend endpoint
+      const response = await fetch("http://localhost:8080/api/auth/google", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -240,24 +201,40 @@ export default function AuthPage() {
 
       const data = await response.json();
 
-      if (data.success && data.data.requiresPassword) {
-        // Store Google user data and show ENTER password verification screen
-        setGoogleUserData({
-          name: data.data.user.username,
-          email: data.data.user.email,
-          role: data.data.user.role,
-          token: "", // No token yet - need to verify password first
+      if (data.success && data.data.token) {
+        // Store JWT token and user info (Google OAuth - always remember)
+        authLogin(data.data.token, {
           id: data.data.user.id,
-        });
-        setShowGooglePasswordSetup(true);
-        setIsLogin(true); // Stay in login mode
+          email: data.data.user.email,
+          username: data.data.user.username,
+          role: data.data.user.role,
+        }, true);  // Always remember for Google OAuth
+
+        // Also update legacy context (for compatibility)
+        login(
+          data.data.user.username,
+          data.data.user.email,
+          data.data.user.role === "admin" ? "Admin" : "Tester"
+        );
+
+        // Redirect based on role
+        if (data.data.user.role === "admin") {
+          setLocation("/admin");
+        } else {
+          setLocation("/dashboard");
+        }
       } else {
-        setLoginError(data.message || "Google login failed");
+        const errorMsg = data.message || "Google authentication failed";
+        setSignupError(errorMsg);
+        setLoginError(errorMsg);
       }
     } catch (error) {
-      console.error("Google login error:", error);
-      setLoginError("Failed to connect to server");
+      console.error("Google auth error:", error);
+      const errorMsg = "Failed to connect to server";
+      setSignupError(errorMsg);
+      setLoginError(errorMsg);
     } finally {
+      setIsSignupLoading(false);
       setIsLoginLoading(false);
     }
   };
@@ -858,20 +835,20 @@ export default function AuthPage() {
                 </div>
                 <div className="relative flex justify-center">
                   <span className="bg-white dark:bg-slate-900 px-2 text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">
-                    {isLogin ? "OR LOGIN WITH" : "OR SIGN UP WITH"}
+                    OR CONTINUE WITH
                   </span>
                 </div>
               </div>
 
               <div className="w-full">
                 <GoogleLogin
-                  onSuccess={isLogin ? handleGoogleLogin : handleGoogleSignup}
+                  onSuccess={handleGoogleAuth}
                   onError={handleGoogleError}
                   useOneTap={false}
                   theme="outline"
                   size="large"
                   width="100%"
-                  text={isLogin ? "signin_with" : "signup_with"}
+                  text="continue_with"
                 />
               </div>
             </>

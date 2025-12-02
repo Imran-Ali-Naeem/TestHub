@@ -37,9 +37,10 @@ type GoogleUserInfo struct {
 	EmailVerified bool   `json:"email_verified"`
 }
 
-// GoogleSignup handles NEW user signup via Google OAuth
-// Endpoint: POST /api/auth/google/signup
-func (h *GoogleAuthHandler) GoogleSignup(w http.ResponseWriter, r *http.Request) {
+// GoogleAuth handles UNIFIED Google OAuth for both signup and login
+// Automatically detects if user is new or existing
+// Endpoint: POST /api/auth/google
+func (h *GoogleAuthHandler) GoogleAuth(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -64,49 +65,65 @@ func (h *GoogleAuthHandler) GoogleSignup(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// CHECK: Reject if email already exists (this is SIGNUP, not login)
+	// Check if user already exists
 	existingUser, _ := h.userService.GetUserByEmail(r.Context(), userInfo.Email)
+	
+	var userID, email, username, role string
+	var needsPassword bool
+	var isNewUser bool
+	
 	if existingUser != nil {
-		json.NewEncoder(w).Encode(Response{
-			Success: false,
-			Message: "Email already registered. Please use the login page instead.",
-		})
-		return
-	}
-
-	// Create user via Google OAuth (NEW USER ONLY)
-	user, err := h.userService.CreateGoogleUser(r.Context(), userInfo.Name, userInfo.Email, userInfo.Picture)
-	if err != nil {
-		json.NewEncoder(w).Encode(Response{
-			Success: false,
-			Message: err.Error(),
-		})
-		return
+		// EXISTING USER
+		userID = existingUser.ID
+		email = existingUser.Email
+		username = existingUser.Username
+		role = existingUser.Role
+		
+		// Check if user has a password set (Password field is not empty)
+		// If they signed up with Google and never set a password, they need to set one
+		// If they have a password, they need to verify it
+		needsPassword = true  // Always require password for security
+		isNewUser = false
+	} else {
+		// NEW USER - Signup flow
+		newUser, err := h.userService.CreateGoogleUser(r.Context(), userInfo.Name, userInfo.Email, userInfo.Picture)
+		if err != nil {
+			json.NewEncoder(w).Encode(Response{
+				Success: false,
+				Message: err.Error(),
+			})
+			return
+		}
+		userID = newUser.ID
+		email = newUser.Email
+		username = newUser.Username
+		role = newUser.Role
+		needsPassword = true  // New users need to set password
+		isNewUser = true
 	}
 
 	// Generate JWT token
-	token, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Username, user.Role)
+	token, err := h.jwtService.GenerateToken(userID, email, username, role)
 	if err != nil {
 		json.NewEncoder(w).Encode(Response{
 			Success: false,
-			Message: "Google signup successful but failed to generate token",
+			Message: "Authentication successful but failed to generate token",
 		})
 		return
 	}
 
-	// Return success response with JWT token and user data
+	// Return unified response - user is authenticated and ready to go!
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(Response{
 		Success: true,
-		Message: "Google signup successful - please set your password",
+		Message: "Google authentication successful",
 		Data: map[string]interface{}{
 			"token": token,
-			"needsPassword": true,  // Flag to show SET password screen
 			"user": map[string]string{
-				"id":       user.ID,
-				"email":    user.Email,
-				"username": user.Username,
-				"role":     user.Role,
+				"id":       userID,
+				"email":    email,
+				"username": username,
+				"role":     role,
 			},
 		},
 	})

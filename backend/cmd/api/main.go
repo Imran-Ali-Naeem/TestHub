@@ -108,10 +108,8 @@ func main() {
 	api.HandleFunc("/users/set-password", userHandler.SetPassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/login", userHandler.Login).Methods("POST", "OPTIONS")
 	
-	// Google OAuth routes - separated for signup vs login
-	api.HandleFunc("/auth/google/signup", googleAuthHandler.GoogleSignup).Methods("POST", "OPTIONS")
-	api.HandleFunc("/auth/google/login", googleAuthHandler.GoogleLogin).Methods("POST", "OPTIONS")
-	api.HandleFunc("/auth/google/verify-password", googleAuthHandler.GoogleLoginVerifyPassword).Methods("POST", "OPTIONS")
+	// Unified Google OAuth route - handles both signup and login automatically
+	api.HandleFunc("/auth/google", googleAuthHandler.GoogleAuth).Methods("POST", "OPTIONS")
 	
 	// Protected routes (authentication required)
 	api.HandleFunc("/auth/me", authMiddleware.Authenticate(userHandler.GetCurrentUser)).Methods("GET", "OPTIONS")
@@ -137,9 +135,7 @@ func main() {
 	log.Println("  GET  /health")
 	log.Println("  POST /api/users/signup (returns JWT)")
 	log.Println("  POST /api/auth/login (returns JWT)")
-	log.Println("  POST /api/auth/google/signup (NEW user - returns JWT + needsPassword)")
-	log.Println("  POST /api/auth/google/login (EXISTING user - returns user data)")
-	log.Println("  POST /api/auth/google/verify-password (verify password - returns JWT)")
+	log.Println("  POST /api/auth/google (unified - auto-detects new/existing user)")
 	log.Println("  POST /api/users/set-password")
 	log.Println("  GET  /api/auth/me (protected)")
 	

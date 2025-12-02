@@ -21,7 +21,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string, user: User) => void;
+  login: (token: string, user: User, rememberMe?: boolean) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -38,7 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize: Check for existing token on mount
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = localStorage.getItem('authToken');
+      // Check both localStorage and sessionStorage for token
+      const storedToken = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
       
       if (storedToken) {
         // Verify token with backend
@@ -56,10 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             // Token invalid or expired
             localStorage.removeItem('authToken');
+            sessionStorage.removeItem('authToken');
           }
         } catch (error) {
           console.error('Token verification failed:', error);
           localStorage.removeItem('authToken');
+          sessionStorage.removeItem('authToken');
         }
       }
       
@@ -69,15 +72,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
-    localStorage.setItem('authToken', newToken);
+  const login = (newToken: string, newUser: User, rememberMe: boolean = false) => {
+    if (rememberMe) {
+      // Store in localStorage (persists after browser close)
+      localStorage.setItem('authToken', newToken);
+      sessionStorage.removeItem('authToken');
+    } else {
+      // Store in sessionStorage (clears when browser closes)
+      sessionStorage.setItem('authToken', newToken);
+      localStorage.removeItem('authToken');
+    }
+    
     setToken(newToken);
     setUser(newUser);
   };
 
   const logout = () => {
-    // Clear JWT token
+    // Clear JWT token from both storages
     localStorage.removeItem('authToken');
+    sessionStorage.removeItem('authToken');
     
     // Also clear legacy userProfile to ensure full logout
     localStorage.removeItem('userProfile');
