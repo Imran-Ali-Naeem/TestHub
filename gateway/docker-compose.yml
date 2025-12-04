@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # ======================================
+  # NGINX Gateway Service
+  # ======================================
+  gateway:
+    image: nginx:alpine
+    container_name: testops-gateway
+    restart: unless-stopped
+    
+    # Port mapping: host:container
+    ports:
+      - "80:80"
+    
+    # Volume mappings
+    volumes:
+      # Mount nginx configuration
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    
+    # Network configuration
+    networks:
+      - testops-network
+    
+    # Health check to verify NGINX is ready
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+# ======================================
+# Networks
+# ======================================
+networks:
+  testops-network:
+    external: true
+    name: testops-db-network
+
