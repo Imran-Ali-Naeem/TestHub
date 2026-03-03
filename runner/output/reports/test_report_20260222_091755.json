@@ -1,0 +1,130 @@
+{
+  "timestamp": "20260222_091755",
+  "total_tests": 12,
+  "passed": 7,
+  "failed": 5,
+  "success_rate": "58.3%",
+  "total_duration_seconds": 940.588674,
+  "results": [
+    {
+      "test_name": "test_python.py",
+      "browser": "chrome",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:13:25.170682",
+      "end_time": "2026-02-22 09:14:54.945288",
+      "duration_seconds": 89.774606,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_python_chrome_success_20260222_091451.png"
+    },
+    {
+      "test_name": "test_python.py",
+      "browser": "firefox",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:13:25.171333",
+      "end_time": "2026-02-22 09:15:16.165448",
+      "duration_seconds": 110.994115,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_python_firefox_success_20260222_091514.png"
+    },
+    {
+      "test_name": "test_fail_demo.py",
+      "browser": "chrome",
+      "status": "FAILED",
+      "start_time": "2026-02-22 09:15:02.477223",
+      "end_time": "2026-02-22 09:15:23.838770",
+      "duration_seconds": 21.361547,
+      "error_message": "Test returned False",
+      "screenshot_path": "/app/output/screenshots/test_fail_demo_chrome_failure_20260222_091521.png"
+    },
+    {
+      "test_name": "test_github.py",
+      "browser": "chrome",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:13:25.167990",
+      "end_time": "2026-02-22 09:16:08.908572",
+      "duration_seconds": 163.740582,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_github_chrome_success_20260222_091604.png"
+    },
+    {
+      "test_name": "test_fail_demo.py",
+      "browser": "firefox",
+      "status": "FAILED",
+      "start_time": "2026-02-22 09:15:27.571442",
+      "end_time": "2026-02-22 09:16:03.072866",
+      "duration_seconds": 35.501424,
+      "error_message": "Test returned False",
+      "screenshot_path": "/app/output/screenshots/test_fail_demo_firefox_failure_20260222_091558.png"
+    },
+    {
+      "test_name": "test_wikipedia.py",
+      "browser": "chrome",
+      "status": "FAILED",
+      "start_time": "2026-02-22 09:15:28.763822",
+      "end_time": "2026-02-22 09:16:12.561625",
+      "duration_seconds": 43.797803,
+      "error_message": "Test returned False",
+      "screenshot_path": "/app/output/screenshots/test_wikipedia_chrome_failure_20260222_091608.png"
+    },
+    {
+      "test_name": "test_demoqa.py",
+      "browser": "chrome",
+      "status": "FAILED",
+      "start_time": "2026-02-22 09:16:14.188202",
+      "end_time": "2026-02-22 09:16:44.472218",
+      "duration_seconds": 30.284016,
+      "error_message": "Test returned False",
+      "screenshot_path": "/app/output/screenshots/test_demoqa_chrome_failure_20260222_091643.png"
+    },
+    {
+      "test_name": "test_example.py",
+      "browser": "chrome",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:16:49.444166",
+      "end_time": "2026-02-22 09:17:04.495920",
+      "duration_seconds": 15.051754,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_example_chrome_success_20260222_091703.png"
+    },
+    {
+      "test_name": "test_wikipedia.py",
+      "browser": "firefox",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:16:13.826398",
+      "end_time": "2026-02-22 09:17:17.815567",
+      "duration_seconds": 63.989169,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_wikipedia_firefox_success_20260222_091715.png"
+    },
+    {
+      "test_name": "test_github.py",
+      "browser": "firefox",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:13:25.170278",
+      "end_time": "2026-02-22 09:17:21.425665",
+      "duration_seconds": 236.255387,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_github_firefox_success_20260222_091718.png"
+    },
+    {
+      "test_name": "test_example.py",
+      "browser": "firefox",
+      "status": "PASSED",
+      "start_time": "2026-02-22 09:17:09.275595",
+      "end_time": "2026-02-22 09:17:45.940490",
+      "duration_seconds": 36.664895,
+      "error_message": null,
+      "screenshot_path": "/app/output/screenshots/test_example_firefox_success_20260222_091745.png"
+    },
+    {
+      "test_name": "test_demoqa.py",
+      "browser": "firefox",
+      "status": "FAILED",
+      "start_time": "2026-02-22 09:16:17.511189",
+      "end_time": "2026-02-22 09:17:50.684565",
+      "duration_seconds": 93.173376,
+      "error_message": "Test returned False",
+      "screenshot_path": "/app/output/screenshots/test_demoqa_firefox_failure_20260222_091750.png"
+    }
+  ]
+}

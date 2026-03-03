@@ -1,0 +1,20 @@
+{
+  "timestamp": "20260223_144448",
+  "total_tests": 1,
+  "passed": 1,
+  "failed": 0,
+  "success_rate": "100.0%",
+  "total_duration_seconds": 8.089412,
+  "results": [
+    {
+      "test_name": "test_example_20260223_144435.py",
+      "browser": "chrome",
+      "status": "PASSED",
+      "start_time": "2026-02-23 14:44:37.104488",
+      "end_time": "2026-02-23 14:44:45.193900",
+      "duration_seconds": 8.089412,
+      "error_message": null,
+      "screenshot_path": "/home/imran/Projects/THEX/runner/output/screenshots/test_example_20260223_144435_chrome_success_20260223_144444.png"
+    }
+  ]
+}

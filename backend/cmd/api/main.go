@@ -134,6 +134,7 @@ func main() {
 	api.HandleFunc("/users/set-password", userHandler.SetPassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/login", userHandler.Login).Methods("POST", "OPTIONS")
 	api.HandleFunc("/auth/google", googleAuthHandler.GoogleAuth).Methods("POST", "OPTIONS")
+	api.HandleFunc("/auth/google/verify-password", googleAuthHandler.GoogleLoginVerifyPassword).Methods("POST", "OPTIONS")
 
 	// Protected routes (authentication required)
 	api.HandleFunc("/auth/me", authMiddleware.Authenticate(userHandler.GetCurrentUser)).Methods("GET", "OPTIONS")

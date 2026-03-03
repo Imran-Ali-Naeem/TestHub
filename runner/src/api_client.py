@@ -19,7 +19,7 @@ logger = setup_logger("api_client")
 class BackendAPIClient:
     """Client for interacting with TestOps backend API"""
     
-    def __init__(self, base_url="http://backend:8080/api"):
+    def __init__(self, base_url="http://localhost:8080/api"):
         self.base_url = base_url
         self.session = requests.Session()
         self.run_id_string: str = None  # Human-readable run ID

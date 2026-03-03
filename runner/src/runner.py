@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 import json
 import argparse
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import our utilities
 from browser_manager import BrowserManager
@@ -26,8 +28,9 @@ logger = setup_logger("runner")
 
 class TestResult:
     """Store test execution results"""
-    def __init__(self, test_name: str):
+    def __init__(self, test_name: str, browser: str = "chrome"):
         self.test_name = test_name
+        self.browser = browser
         self.status = "PENDING"  # PENDING, RUNNING, PASSED, FAILED
         self.start_time = None
         self.end_time = None
@@ -38,6 +41,7 @@ class TestResult:
     def to_dict(self):
         return {
             "test_name": self.test_name,
+            "browser": self.browser,
             "status": self.status,
             "start_time": str(self.start_time) if self.start_time else None,
             "end_time": str(self.end_time) if self.end_time else None,
@@ -50,14 +54,21 @@ class TestResult:
 class TestRunner:
     """Main test runner class"""
     
-    def __init__(self, email=None, test_id=None, backend_url="http://backend:8080/api", username=None, user_id=None, browser="chrome"):
+    def __init__(self, email=None, test_id=None, backend_url="http://localhost:8080/api", username=None, user_id=None, browser="chrome", browsers=None, parallel=1):
         # Validate required parameters
         if not email or not username:
             logger.error("❌ email and username are required parameters!")
             raise ValueError("email and username are required parameters")
         
-        # Browser selection (chrome or firefox)
-        self.selected_browser = browser.lower() if browser else "chrome"
+        # Browser selection — supports multiple browsers for parallel cross-browser testing
+        if browsers:
+            self.browsers = [b.strip().lower() for b in browsers]
+        else:
+            self.browsers = [browser.lower() if browser else "chrome"]
+        self.selected_browser = self.browsers[0]  # Default/first browser
+        
+        # Parallel execution config
+        self.parallel = max(1, parallel)
         
         # Determine directories - support both Docker (/app/) and local paths
         base_dir = Path(os.getenv("RUNNER_BASE_DIR", "/app"))
@@ -74,9 +85,9 @@ class TestRunner:
         
         self.browser_manager = None
         self.screenshot_handler = Screenshot(str(self.screenshots_dir))
-        self.video_recorder = VideoRecorder(str(self.videos_dir))
         self.results = []
-        self.specific_file = None  # For running specific test file
+        self._results_lock = threading.Lock()  # Thread-safe result collection
+        self.specific_files = []  # For running specific test file(s)
         
         # User information (REQUIRED!)
         self.email = email
@@ -120,6 +131,8 @@ class TestRunner:
         logger.info(f"👤 Username: {self.username}")
         logger.info(f"📧 Email: {self.email}")
         logger.info(f"🆔 Run ID: {self.run_id_string}")
+        logger.info(f"🌐 Browsers: {', '.join(self.browsers)}")
+        logger.info(f"🔀 Parallel workers: {self.parallel}")
         if self.user_id:
             logger.info(f"🔑 User ID: {self.user_id}")
         if self.api_client:
@@ -133,14 +146,15 @@ class TestRunner:
             logger.error(f"Test directory does not exist: {self.test_dir}")
             return test_files
         
-        # If specific file is requested, only run that file
-        if self.specific_file:
-            specific_path = self.test_dir / self.specific_file
-            if specific_path.exists():
-                test_files.append(specific_path)
-                logger.info(f"📋 Running specific test: {self.specific_file}")
-            else:
-                logger.error(f"❌ Test file not found: {self.specific_file}")
+        # If specific file(s) requested, only run those
+        if self.specific_files:
+            for fname in self.specific_files:
+                specific_path = self.test_dir / fname
+                if specific_path.exists():
+                    test_files.append(specific_path)
+                    logger.info(f"📋 Running specific test: {fname}")
+                else:
+                    logger.error(f"❌ Test file not found: {fname}")
             return test_files
         
         # Otherwise discover all test files
@@ -151,7 +165,7 @@ class TestRunner:
         
         return test_files
     
-    def collect_test_screenshots(self, test_name: str, test_start_time: datetime):
+    def collect_test_screenshots(self, test_name: str, test_start_time: datetime, browser_type: str = None):
         """
         Collect all screenshots created by the test during execution.
         This finds screenshots taken by the test script itself (not the runner's success/failure screenshots).
@@ -159,7 +173,9 @@ class TestRunner:
         Args:
             test_name: Name of the test (without extension)
             test_start_time: When the test started executing
+            browser_type: Browser type for this test execution
         """
+        browser_type = browser_type or self.current_browser
         if not self.db_service or not self.db_service.connected:
             return
         
@@ -207,7 +223,7 @@ class TestRunner:
                     "name": screenshot_file.name,
                     "filepath": str(screenshot_file),
                     "step": step_name,
-                    "browser": self.current_browser
+                    "browser": browser_type
                 }
                 
                 if self.db_service.save_screenshot(screenshot_data):
@@ -230,94 +246,101 @@ class TestRunner:
             logger.error(f"Failed to load test module {test_file.name}: {e}")
             raise
     
-    def execute_test(self, test_file: Path):
-        """Execute a single test file"""
-        result = TestResult(test_file.name)
+    def execute_test(self, test_file: Path, browser_type: str = None):
+        """
+        Execute a single test file on a specific browser.
+        Thread-safe — creates LOCAL BrowserManager + VideoRecorder per execution.
+        Can be called in parallel from ThreadPoolExecutor.
+        
+        Args:
+            test_file: Path to the test script
+            browser_type: Browser to run on ("chrome" or "firefox")
+        """
+        browser_type = browser_type or self.selected_browser
+        log_prefix = f"[{test_file.stem}/{browser_type}]"
+        
+        result = TestResult(test_file.name, browser=browser_type)
         result.status = "RUNNING"
         result.start_time = datetime.now()
         video_path = None
         
-        # Update database log handler with current test name
-        if hasattr(self, 'db_log_handler'):
-            self.db_log_handler.set_test_name(test_file.stem)
+        # Create LOCAL instances for thread safety — each test gets its own
+        browser_manager = BrowserManager(browser_type=browser_type, headless=False)
+        video_recorder = VideoRecorder(str(self.videos_dir))
+        screenshot_handler = Screenshot(str(self.screenshots_dir))
         
         logger.info("")
         logger.info("=" * 80)
-        logger.info(f"🚀 RUNNING TEST: {test_file.name}")
+        logger.info(f"🚀 {log_prefix} RUNNING TEST: {test_file.name} on {browser_type}")
         logger.info("=" * 80)
         
         try:
-            # Initialize browser (use selected browser type)
-            browser_type = self.selected_browser
-            # Use headless=False for Grid so browser displays on Xvfb for video recording
-            self.browser_manager = BrowserManager(browser_type=browser_type, headless=False)
-            driver = self.browser_manager.get_driver()
-            logger.info("✅ Browser initialized successfully")
+            # Initialize browser via Grid Hub
+            driver = browser_manager.get_driver()
+            logger.info(f"{log_prefix} ✅ Browser initialized (session: {browser_manager.session_id})")
             
             # Start video recording AFTER browser is initialized
-            # Pass browser type to video recorder
-            video_path = self.video_recorder.start_recording(test_file.stem, browser=browser_type)
-            
-            # Set current browser for artifacts
-            self.current_browser = browser_type
-            self.db_service.set_current_browser(browser_type)
+            # Pass session_id so video recorder can find the exact Grid node container
+            video_path = video_recorder.start_recording(
+                test_file.stem,
+                browser=browser_type,
+                session_id=browser_manager.session_id
+            )
             
             # Load and execute test module
             module = self.load_test_module(test_file)
             
             # Check if module has run_test function
             if hasattr(module, 'run_test'):
-                logger.info(f"▶️  Executing test function...")
+                logger.info(f"{log_prefix} ▶️  Executing test function...")
                 
                 test_passed = module.run_test(driver)
                 
                 if test_passed:
                     result.status = "PASSED"
-                    logger.info("✅ TEST PASSED")
-                    # Capture success screenshot
-                    screenshot_path = self.screenshot_handler.capture_success(
-                        driver, test_file.stem
+                    logger.info(f"{log_prefix} ✅ TEST PASSED")
+                    # Capture success screenshot (include browser in filename for uniqueness)
+                    screenshot_path = screenshot_handler.capture_success(
+                        driver, f"{test_file.stem}_{browser_type}"
                     )
                     result.screenshot_path = screenshot_path
                     
                     # Save screenshot to database
                     if screenshot_path:
-                        from pathlib import Path
-                        screenshot_file = Path(screenshot_path)
-                        if screenshot_file.exists():
+                        screenshot_file_obj = Path(screenshot_path)
+                        if screenshot_file_obj.exists():
                             screenshot_data = {
                                 "run_id_string": self.run_id_string,
                                 "test_name": test_file.stem,
-                                "filename": screenshot_file.name,
-                                "name": screenshot_file.name,
+                                "filename": screenshot_file_obj.name,
+                                "name": screenshot_file_obj.name,
                                 "filepath": str(screenshot_path),
                                 "step": f"Success - {test_file.stem}",
-                                "browser": self.current_browser
+                                "browser": browser_type
                             }
                             self.db_service.save_screenshot(screenshot_data)
                 else:
                     result.status = "FAILED"
-                    logger.error("❌ TEST FAILED")
+                    logger.error(f"{log_prefix} ❌ TEST FAILED")
                     # Capture failure screenshot
-                    screenshot_path = self.screenshot_handler.capture_failure(
-                        driver, test_file.stem
+                    screenshot_path = screenshot_handler.capture_failure(
+                        driver, f"{test_file.stem}_{browser_type}"
                     )
                     result.screenshot_path = screenshot_path
                     result.error_message = "Test returned False"
                     
                     # Save screenshot to database
                     if screenshot_path:
-                        from pathlib import Path
-                        screenshot_file = Path(screenshot_path)
-                        if screenshot_file.exists():
+                        screenshot_file_obj = Path(screenshot_path)
+                        if screenshot_file_obj.exists():
                             screenshot_data = {
                                 "run_id_string": self.run_id_string,
                                 "test_name": test_file.stem,
-                                "filename": screenshot_file.name,
-                                "name": screenshot_file.name,
+                                "filename": screenshot_file_obj.name,
+                                "name": screenshot_file_obj.name,
                                 "filepath": str(screenshot_path),
                                 "step": f"Failure - {test_file.stem}",
-                                "browser": self.current_browser
+                                "browser": browser_type
                             }
                             self.db_service.save_screenshot(screenshot_data)
             else:
@@ -326,14 +349,14 @@ class TestRunner:
         except Exception as e:
             result.status = "FAILED"
             result.error_message = str(e)
-            logger.error(f"❌ TEST FAILED WITH ERROR: {e}")
+            logger.error(f"{log_prefix} ❌ TEST FAILED WITH ERROR: {e}")
             logger.error(traceback.format_exc())
             
             # Try to capture failure screenshot
             try:
-                if self.browser_manager and self.browser_manager.driver:
-                    screenshot_path = self.screenshot_handler.capture_failure(
-                        self.browser_manager.driver, test_file.stem
+                if browser_manager and browser_manager.driver:
+                    screenshot_path = screenshot_handler.capture_failure(
+                        browser_manager.driver, f"{test_file.stem}_{browser_type}"
                     )
                     result.screenshot_path = screenshot_path
             except:
@@ -341,48 +364,43 @@ class TestRunner:
         
         finally:
             # Collect all screenshots created during the test
-            # This captures screenshots taken by the test script itself
             if hasattr(result, 'start_time') and result.start_time:
-                self.collect_test_screenshots(test_file.stem, result.start_time)
+                self.collect_test_screenshots(test_file.stem, result.start_time, browser_type)
             
             # Calculate duration FIRST before using it
             result.end_time = datetime.now()
             result.duration = (result.end_time - result.start_time).total_seconds()
             
-            # Stop video recording
-            if self.video_recorder.is_recording():
-                stopped_video_path = self.video_recorder.stop_recording()
+            # Stop video recording (using LOCAL video_recorder)
+            if video_recorder.is_recording():
+                stopped_video_path = video_recorder.stop_recording()
                 if stopped_video_path:
-                    # Save video to database (GridFS + metadata)
-                    from pathlib import Path
-                    video_file = Path(stopped_video_path)
-                    if video_file.exists():
-                        size_bytes = video_file.stat().st_size
+                    video_file_obj = Path(stopped_video_path)
+                    if video_file_obj.exists():
                         video_data = {
                             "run_id_string": self.run_id_string,
                             "test_name": test_file.stem,
-                            "filename": video_file.name,
-                            "name": video_file.name,
+                            "filename": video_file_obj.name,
+                            "name": video_file_obj.name,
                             "filepath": str(stopped_video_path),
-                            "duration_seconds": result.duration,  # Now this has the correct value
-                            "browser": self.current_browser
+                            "duration_seconds": result.duration,
+                            "browser": browser_type
                         }
                         self.db_service.save_video(video_data)
             
-            # Clean up browser
-            if self.browser_manager:
+            # Clean up browser (LOCAL browser_manager)
+            if browser_manager:
                 try:
-                    self.browser_manager.quit()
-                    logger.info("🔒 Browser closed")
+                    browser_manager.quit()
+                    logger.info(f"{log_prefix} 🔒 Browser closed")
                 except:
                     pass
-                self.browser_manager = None
             
             # Save individual test result to database
             test_result_data = {
                 "run_id_string": self.run_id_string,
                 "test_name": test_file.stem,
-                "browser": self.current_browser,
+                "browser": browser_type,
                 "status": result.status,
                 "duration_seconds": result.duration,
                 "start_time": result.start_time,
@@ -395,13 +413,13 @@ class TestRunner:
             log_data = {
                 "run_id_string": self.run_id_string,
                 "test_name": test_file.stem,
-                "browser": self.current_browser,
-                "message": f"Test {result.status}: {test_file.stem}",
+                "browser": browser_type,
+                "message": f"Test {result.status}: {test_file.stem} [{browser_type}]",
                 "level": "info" if result.status == "PASSED" else "error"
             }
             self.db_service.save_log(log_data)
             
-            logger.info(f"⏱️  Duration: {result.duration:.2f} seconds")
+            logger.info(f"{log_prefix} ⏱️  Duration: {result.duration:.2f} seconds")
             logger.info("=" * 80)
         
         return result
@@ -445,7 +463,7 @@ class TestRunner:
         return summary
     
     def run(self):
-        """Main execution method"""
+        """Main execution method — supports parallel cross-browser execution"""
         logger.info("🔍 Discovering tests...")
         test_files = self.discover_tests()
         
@@ -456,20 +474,58 @@ class TestRunner:
         
         logger.info(f"📝 Found {len(test_files)} test(s)")
         
+        # Build test matrix: each test × each browser
+        test_matrix = []
+        for test_file in test_files:
+            for browser in self.browsers:
+                test_matrix.append((test_file, browser))
+        
+        total_executions = len(test_matrix)
+        logger.info(f"📊 Test matrix: {len(test_files)} test(s) × {len(self.browsers)} browser(s) = {total_executions} execution(s)")
+        if self.parallel > 1:
+            logger.info(f"🔀 Parallel execution with {self.parallel} workers")
+        
         # Register/find the test run in DB BEFORE executing tests
-        # so that current_run_id is set when save_test_result runs
         run_data = {
             "run_id": self.run_id_string,
             "suite_name": "Test Run",
-            "browsers": [self.current_browser],
+            "browsers": self.browsers,
             "trigger_type": "manual"
         }
         self.db_service.create_test_run(run_data)
         
-        # Execute all tests
-        for test_file in test_files:
-            result = self.execute_test(test_file)
-            self.results.append(result)
+        # Execute tests — parallel or sequential
+        if self.parallel > 1 and total_executions > 1:
+            # ===== PARALLEL EXECUTION =====
+            logger.info(f"🚀 Starting parallel execution ({self.parallel} workers)...")
+            with ThreadPoolExecutor(max_workers=self.parallel) as executor:
+                futures = {}
+                for test_file, browser in test_matrix:
+                    future = executor.submit(self.execute_test, test_file, browser)
+                    futures[future] = (test_file.name, browser)
+                
+                for future in as_completed(futures):
+                    test_info = futures[future]
+                    try:
+                        result = future.result()
+                        with self._results_lock:
+                            self.results.append(result)
+                        logger.info(f"✅ Completed: {test_info[0]} [{test_info[1]}] — {result.status}")
+                    except Exception as e:
+                        logger.error(f"❌ Execution crashed: {test_info[0]} [{test_info[1]}] — {e}")
+                        # Create a failed result for crashed executions
+                        crash_result = TestResult(test_info[0], browser=test_info[1])
+                        crash_result.status = "FAILED"
+                        crash_result.error_message = f"Execution crashed: {str(e)}"
+                        crash_result.start_time = datetime.now()
+                        crash_result.end_time = datetime.now()
+                        with self._results_lock:
+                            self.results.append(crash_result)
+        else:
+            # ===== SEQUENTIAL EXECUTION (backward compatible) =====
+            for test_file, browser in test_matrix:
+                result = self.execute_test(test_file, browser)
+                self.results.append(result)
         
         # Generate report
         logger.info("")
@@ -483,11 +539,14 @@ class TestRunner:
         logger.info("=" * 80)
         logger.info("📈 TEST EXECUTION SUMMARY")
         logger.info("=" * 80)
-        logger.info(f"Total Tests:   {summary['total_tests']}")
-        logger.info(f"✅ Passed:     {summary['passed']}")
-        logger.info(f"❌ Failed:     {summary['failed']}")
-        logger.info(f"📊 Success Rate: {summary['success_rate']}")
-        logger.info(f"⏱️  Total Time: {summary['total_duration_seconds']:.2f}s")
+        logger.info(f"Total Executions: {summary['total_tests']}")
+        logger.info(f"✅ Passed:        {summary['passed']}")
+        logger.info(f"❌ Failed:        {summary['failed']}")
+        logger.info(f"📊 Success Rate:  {summary['success_rate']}")
+        logger.info(f"⏱️  Total Time:   {summary['total_duration_seconds']:.2f}s")
+        if self.parallel > 1:
+            logger.info(f"🔀 Workers used:  {self.parallel}")
+        logger.info(f"🌐 Browsers:      {', '.join(self.browsers)}")
         logger.info("=" * 80)
         
         # Exit with appropriate code
@@ -505,13 +564,29 @@ if __name__ == "__main__":
     parser.add_argument('--username', type=str, required=True, help='Username executing the tests (REQUIRED)')
     parser.add_argument('--user-id', type=str, help='User ID (MongoDB ObjectID)')
     parser.add_argument('--test-id', type=str, help='Test execution ID')
-    parser.add_argument('--backend-url', type=str, default='http://backend:8080/api', 
+    parser.add_argument('--backend-url', type=str, default='http://localhost:8080/api', 
                         help='Backend API URL')
-    parser.add_argument('--file', type=str, help='Specific test file to run (e.g., test_python.py)')
+    parser.add_argument('--file', type=str, help='Test file(s) to run, comma-separated (e.g., test_python.py,test_github.py)')
+    parser.add_argument('--files', type=str, default=None,
+                        help='Alias for --file. Comma-separated test files (e.g., test_python.py,test_github.py)')
     parser.add_argument('--browser', type=str, default='chrome', choices=['chrome', 'firefox'],
-                        help='Browser to use (chrome or firefox)')
+                        help='Browser to use when --browsers is not specified')
+    parser.add_argument('--browsers', type=str, default=None,
+                        help='Comma-separated list of browsers (e.g., chrome,firefox). Overrides --browser.')
+    parser.add_argument('--parallel', type=int, default=1,
+                        help='Number of parallel workers (default: 1 = sequential)')
     
     args = parser.parse_args()
+    
+    # Parse browsers list
+    browsers_list = None
+    if args.browsers:
+        browsers_list = [b.strip().lower() for b in args.browsers.split(',')]
+        # Validate browser names
+        valid_browsers = {'chrome', 'firefox'}
+        for b in browsers_list:
+            if b not in valid_browsers:
+                parser.error(f"Invalid browser '{b}'. Choose from: {', '.join(valid_browsers)}")
     
     runner = TestRunner(
         email=args.email,
@@ -519,12 +594,15 @@ if __name__ == "__main__":
         user_id=args.user_id,
         test_id=args.test_id,
         backend_url=args.backend_url,
-        browser=args.browser
+        browser=args.browser,
+        browsers=browsers_list,
+        parallel=args.parallel
     )
     
-    # If specific file is provided, run only that file
-    if args.file:
-        runner.specific_file = args.file
+    # If specific file(s) provided, run only those (--files takes priority over --file)
+    file_arg = args.files or args.file
+    if file_arg:
+        runner.specific_files = [f.strip() for f in file_arg.split(',') if f.strip()]
     
     runner.run()
 

@@ -28,9 +28,9 @@ export const API_ENDPOINTS = {
   RUN_RESULTS: (runId: string) => `${API_BASE_URL}/api/runs/${runId}/results`,
   
   // Run Artifacts
-  RUN_SCREENSHOTS: (runId: string) => `${API_BASE_URL}/api/artifacts/runs/${runId}/screenshots`,
-  RUN_LOGS: (runId: string) => `${API_BASE_URL}/api/artifacts/runs/${runId}/logs`,
-  RUN_VIDEOS: (runId: string) => `${API_BASE_URL}/api/artifacts/runs/${runId}/videos`,
+  RUN_SCREENSHOTS: (runId: string) => `${API_BASE_URL}/api/runs/${runId}/screenshots`,
+  RUN_LOGS: (runId: string) => `${API_BASE_URL}/api/runs/${runId}/logs`,
+  RUN_VIDEOS: (runId: string) => `${API_BASE_URL}/api/runs/${runId}/videos`,
   
   // Result Artifacts (for specific test result)
   RESULT_SCREENSHOTS: (resultId: string) => `${API_BASE_URL}/api/artifacts/results/${resultId}/screenshots`,

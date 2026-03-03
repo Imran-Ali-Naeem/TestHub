@@ -133,9 +133,9 @@ db.test_suites.createIndex({ "email": 1 });
 print('Creating index on user_id for test_suites...');
 db.test_suites.createIndex({ "user_id": 1 });
 
-// Index on suite_id for quick lookup
-print('Creating index on suite_id for test_suites...');
-db.test_suites.createIndex({ "suite_id": 1 }, { unique: true });
+// Index on created_by for filtering suites by creator email
+print('Creating index on created_by for test_suites...');
+db.test_suites.createIndex({ "created_by": 1 });
 
 // Index on status for filtering by status
 print('Creating index on status for test_suites...');

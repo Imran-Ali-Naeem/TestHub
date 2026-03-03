@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Browser manager for initializing and managing Chrome/Firefox instances via Selenium Grid
-Updated to use Remote WebDriver connecting to Selenium Grid containers
+Browser manager for initializing and managing Chrome/Firefox instances via Selenium Grid Hub.
+Both browsers connect to the single Hub URL — the Hub routes requests to the correct node
+based on browser capabilities (ChromeOptions vs FirefoxOptions).
 """
 import logging
 import os
@@ -18,17 +19,13 @@ class BrowserManager:
         self.headless = headless
         self.use_grid = use_grid
         self.driver = None
+        self.session_id = None  # Exposed for video recorder to find the correct node container
         
-        # Selenium Grid URLs - configurable via env vars for local vs Docker
-        chrome_grid = os.environ.get("SELENIUM_CHROME_URL", "http://selenium-chrome:4444")
-        firefox_grid = os.environ.get("SELENIUM_FIREFOX_URL", "http://selenium-firefox:4444")
-        self.grid_urls = {
-            "chrome": chrome_grid,
-            "firefox": firefox_grid
-        }
+        # Single Selenium Grid Hub URL — Hub routes to correct node automatically
+        self.hub_url = os.environ.get("SELENIUM_HUB_URL", "http://selenium-hub:4444")
     
-    def initialize_chrome(self) -> webdriver.Chrome:
-        """Initialize Chrome browser via Selenium Grid"""
+    def initialize_chrome(self) -> webdriver.Remote:
+        """Initialize Chrome browser via Selenium Grid Hub"""
         options = ChromeOptions()
         
         # Keep headless option (though Grid containers already use Xvfb)
@@ -50,13 +47,12 @@ class BrowserManager:
         
         try:
             if self.use_grid:
-                # Connect to Selenium Grid Chrome node
-                grid_url = self.grid_urls["chrome"]
+                # Connect to Selenium Grid Hub — Hub routes to a Chrome node
                 driver = webdriver.Remote(
-                    command_executor=grid_url,
+                    command_executor=self.hub_url,
                     options=options
                 )
-                logger.info(f"Chrome browser initialized via Grid at {grid_url}")
+                logger.info(f"Chrome browser initialized via Hub at {self.hub_url} (session: {driver.session_id})")
             else:
                 # Fallback to local Chrome (for backward compatibility)
                 driver = webdriver.Chrome(options=options)
@@ -67,8 +63,8 @@ class BrowserManager:
             logger.error(f"Failed to initialize Chrome: {e}")
             raise
     
-    def initialize_firefox(self) -> webdriver.Firefox:
-        """Initialize Firefox browser via Selenium Grid"""
+    def initialize_firefox(self) -> webdriver.Remote:
+        """Initialize Firefox browser via Selenium Grid Hub"""
         options = FirefoxOptions()
         
         if self.headless:
@@ -79,13 +75,12 @@ class BrowserManager:
         
         try:
             if self.use_grid:
-                # Connect to Selenium Grid Firefox node
-                grid_url = self.grid_urls["firefox"]
+                # Connect to Selenium Grid Hub — Hub routes to a Firefox node
                 driver = webdriver.Remote(
-                    command_executor=grid_url,
+                    command_executor=self.hub_url,
                     options=options
                 )
-                logger.info(f"Firefox browser initialized via Grid at {grid_url}")
+                logger.info(f"Firefox browser initialized via Hub at {self.hub_url} (session: {driver.session_id})")
             else:
                 # Fallback to local Firefox (for backward compatibility)
                 driver = webdriver.Firefox(options=options)
@@ -97,7 +92,7 @@ class BrowserManager:
             raise
     
     def get_driver(self):
-        """Get WebDriver instance"""
+        """Get WebDriver instance and store session_id for video tracking"""
         if self.driver is None:
             if self.browser_type == "chrome":
                 self.driver = self.initialize_chrome()
@@ -105,6 +100,10 @@ class BrowserManager:
                 self.driver = self.initialize_firefox()
             else:
                 raise ValueError(f"Unsupported browser type: {self.browser_type}")
+            
+            # Store session_id — used by VideoRecorder to find the exact node container
+            self.session_id = self.driver.session_id
+            logger.info(f"WebDriver session ID: {self.session_id}")
         
         return self.driver
     

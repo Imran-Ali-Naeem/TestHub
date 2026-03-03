@@ -240,6 +240,11 @@ export default function TesterTestResults() {
     try { const d = new Date(dateString); return isNaN(d.getTime()) ? 'N/A' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); }
     catch { return 'N/A'; }
   };
+  const formatTimePrecise = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    try { const d = new Date(dateString); return isNaN(d.getTime()) ? 'N/A' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }); }
+    catch { return 'N/A'; }
+  };
 
   const getStatus = () => {
     if (!testSuite) return 'running';
@@ -456,6 +461,14 @@ export default function TesterTestResults() {
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       Duration: {Math.round(result.duration_seconds)}s
                     </p>
+                    <div className="flex flex-col gap-0.5 mt-1">
+                      <p className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400">
+                        ▶ Start: {formatTimePrecise(result.start_time)}
+                      </p>
+                      <p className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
+                        ■ End: {formatTimePrecise(result.end_time)}
+                      </p>
+                    </div>
                     {result.error_message && (
                       <p className="text-xs text-red-600 dark:text-red-400 mt-1 truncate">{result.error_message}</p>
                     )}

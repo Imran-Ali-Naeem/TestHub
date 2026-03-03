@@ -1,40 +1,26 @@
 FROM python:3.11-slim
 
 # Install system dependencies
+# - curl: needed for Grid Hub API queries (video_recorder.py uses urllib, but curl useful for debugging)
+# - Docker CLI: needed for 'docker exec' into Grid node containers (video recording via ffmpeg)
+# - ffmpeg is NOT needed here — it runs inside the Selenium node containers
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     unzip \
     curl \
-    xvfb \
-    ffmpeg \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker CLI (needed for docker exec to Selenium containers)
+# Install Docker CLI (needed for docker exec to Selenium Grid node containers)
 RUN curl -fsSL https://get.docker.com -o get-docker.sh \
     && sh get-docker.sh \
     && rm get-docker.sh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Google Chrome Stable
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install matching ChromeDriver - using latest stable version
-RUN CHROME_MAJOR_VERSION=$(google-chrome --version | grep -oP '\d+' | head -1) \
-    && echo "Chrome major version: $CHROME_MAJOR_VERSION" \
-    && CHROMEDRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_${CHROME_MAJOR_VERSION}") \
-    && echo "ChromeDriver version: $CHROMEDRIVER_VERSION" \
-    && wget -O /tmp/chromedriver-linux64.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" \
-    && unzip /tmp/chromedriver-linux64.zip -d /tmp/ \
-    && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/chromedriver* \
-    && chromedriver --version
+# NOTE: Chrome/ChromeDriver are NOT installed locally.
+# The runner uses Remote WebDriver to connect to Selenium Grid Hub,
+# which routes requests to Chrome/Firefox node containers.
 
 WORKDIR /app
 
@@ -51,11 +37,7 @@ RUN mkdir -p logs output/screenshots output/reports output/videos
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV DISPLAY=:99
-ENV CHROME_BIN=/usr/bin/google-chrome-stable
-ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+ENV SELENIUM_HUB_URL=http://selenium-hub:4444
 
-# Start Xvfb and run the test runner
-CMD Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
-    sleep 2 && \
-    python src/runner.py
+# Default command — just run the runner (no Xvfb needed, browsers run in Grid nodes)
+CMD ["python", "src/runner.py"]

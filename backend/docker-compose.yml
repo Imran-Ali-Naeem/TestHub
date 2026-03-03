@@ -15,7 +15,17 @@ services:
     environment:
       PORT: 8080
       MONGO_URL: mongodb://admin:admin123@mongo:27017
-      HOST_PROJECT_PATH: /home/imran/Projects/THEX
+      TESTSCRIPTS_DIR: /app/testscripts
+      RUNNER_DIR: /app
+      SELENIUM_HUB_URL: http://selenium-hub:4444
+      BACKEND_INTERNAL_URL: http://testops-backend-api:8080/api
+      RUNNER_IMAGE: thex_runner:latest
+      DOCKER_NETWORK: testops-db-network
+      MONGO_HOST: testops-mongo
+      MONGO_PORT: "27017"
+      MONGO_USERNAME: admin
+      MONGO_PASSWORD: admin123
+      MONGO_DATABASE: testops
     
     # Port mapping: host:container
     ports:

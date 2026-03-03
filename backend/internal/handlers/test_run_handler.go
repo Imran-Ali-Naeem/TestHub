@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -587,39 +588,49 @@ func (h *TestRunHandler) CreateAndRunSuite(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Parse parallel count from form (optional, defaults to auto-calculate)
+	parallelStr := r.FormValue("parallel")
+	parallelCount := 0 // 0 = auto-calculate (files × browsers)
+	if parallelStr != "" {
+		fmt.Sscanf(parallelStr, "%d", &parallelCount)
+	}
+
 	// Log request details for debugging
-	fmt.Printf("CreateAndRunSuite: user=%s, email=%s, userID=%s, suite=%s, browsers=%v, files=%d\n",
-		username, email, userID, suiteName, browsers, len(files))
+	fmt.Printf("CreateAndRunSuite: user=%s, email=%s, userID=%s, suite=%s, browsers=%v, files=%d, parallel=%d\n",
+		username, email, userID, suiteName, browsers, len(files), parallelCount)
 
-	// Spawn Python runner: tests on the SAME browser run sequentially,
-	// different browsers run in parallel. This prevents video mixing since
-	// each Selenium container has only one display.
+	// Spawn a SINGLE runner container with --files, --browsers, --parallel.
+	// The runner handles all parallelism internally via ThreadPoolExecutor + Selenium Grid.
 	if h.runnerService != nil {
-		backendURL := fmt.Sprintf("http://localhost:%s/api", os.Getenv("PORT"))
-		if backendURL == "http://localhost:/api" {
-			backendURL = "http://localhost:8080/api"
-		}
-
-		// Group test cases by browser
-		browserTests := make(map[string][]services.RunParams)
-		for _, tc := range testCases {
-			for _, browser := range browsers {
-				params := services.RunParams{
-					RunID:      runID,
-					Email:      claims.Email,
-					Username:   username,
-					UserID:     userID,
-					BackendURL: backendURL,
-					TestFile:   tc.OriginalFilename,
-					Browser:    browser,
-				}
-				browserTests[browser] = append(browserTests[browser], params)
+		backendURL := os.Getenv("BACKEND_INTERNAL_URL")
+		if backendURL == "" {
+			backendURL = fmt.Sprintf("http://testops-backend-api:%s/api", os.Getenv("PORT"))
+			if backendURL == "http://testops-backend-api:/api" {
+				backendURL = "http://testops-backend-api:8080/api"
 			}
 		}
 
-		// Launch one goroutine per browser — tests within each browser run sequentially
-		for browser, paramsList := range browserTests {
-			go h.runnerService.ExecuteTestRunsForBrowser(browser, paramsList)
+		// Collect all test file names
+		var testFileNames []string
+		for _, tc := range testCases {
+			testFileNames = append(testFileNames, tc.OriginalFilename)
+		}
+
+		params := services.RunParams{
+			RunID:      runID,
+			Email:      claims.Email,
+			Username:   username,
+			UserID:     userID,
+			BackendURL: backendURL,
+			TestFiles:  testFileNames,
+			Browsers:   browsers,
+			Parallel:   parallelCount,
+		}
+
+		if err := h.runnerService.ExecuteTestRunParallel(params); err != nil {
+			log.Printf("⚠️ Failed to spawn runner: %v", err)
+			http.Error(w, fmt.Sprintf("Failed to start test runner: %v", err), http.StatusInternalServerError)
+			return
 		}
 	}
 

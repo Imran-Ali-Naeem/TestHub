@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useLocation } from 'wouter';
+import { API_ENDPOINTS } from './apiConfig';
 
 /**
  * JWT Auth Context
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedToken) {
         // Verify token with backend
         try {
-          const response = await fetch('http://localhost:8080/api/auth/me', {
+          const response = await fetch(API_ENDPOINTS.ME, {
             headers: {
               'Authorization': `Bearer ${storedToken}`,
             },
